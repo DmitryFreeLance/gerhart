@@ -1,0 +1,12 @@
+/Users/dmitry/Desktop/gerhart/src/main/java/com/gerhart/bot/Main.java
+/Users/dmitry/Desktop/gerhart/src/main/java/com/gerhart/bot/bot/AutoGoodsBot.java
+/Users/dmitry/Desktop/gerhart/src/main/java/com/gerhart/bot/config/AppConfig.java
+/Users/dmitry/Desktop/gerhart/src/main/java/com/gerhart/bot/db/Database.java
+/Users/dmitry/Desktop/gerhart/src/main/java/com/gerhart/bot/db/dao/SaleDao.java
+/Users/dmitry/Desktop/gerhart/src/main/java/com/gerhart/bot/db/dao/UserDao.java
+/Users/dmitry/Desktop/gerhart/src/main/java/com/gerhart/bot/model/Role.java
+/Users/dmitry/Desktop/gerhart/src/main/java/com/gerhart/bot/model/Sale.java
+/Users/dmitry/Desktop/gerhart/src/main/java/com/gerhart/bot/model/SaleStatus.java
+/Users/dmitry/Desktop/gerhart/src/main/java/com/gerhart/bot/model/User.java
+/Users/dmitry/Desktop/gerhart/src/main/java/com/gerhart/bot/service/BotService.java
+/Users/dmitry/Desktop/gerhart/src/main/java/com/gerhart/bot/state/StateStore.java

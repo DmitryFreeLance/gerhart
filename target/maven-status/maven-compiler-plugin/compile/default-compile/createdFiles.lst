@@ -1,0 +1,13 @@
+com/gerhart/bot/db/Database.class
+com/gerhart/bot/service/BotService.class
+com/gerhart/bot/model/SaleStatus.class
+com/gerhart/bot/bot/AutoGoodsBot.class
+com/gerhart/bot/state/StateStore.class
+com/gerhart/bot/config/AppConfig.class
+com/gerhart/bot/model/User.class
+com/gerhart/bot/model/Role.class
+com/gerhart/bot/state/StateStore$State.class
+com/gerhart/bot/model/Sale.class
+com/gerhart/bot/db/dao/UserDao.class
+com/gerhart/bot/Main.class
+com/gerhart/bot/db/dao/SaleDao.class
