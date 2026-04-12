@@ -75,7 +75,17 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         );
 
         if (text != null && text.startsWith("/start")) {
-            sendMainMenu(user, "Добро пожаловать в систему продаж автотоваров. Выберите действие:");
+            sendMainMenu(user, """
+                    🚗 Добро пожаловать в клуб автотоваров!
+
+                    Здесь вы сможете:
+                    • развивать свою команду;
+                    • отслеживать прогресс по уровням;
+                    • покупать новый уровень и отправлять чек;
+                    • получать выплаты напрямую по своим реквизитам.
+
+                    Выберите нужный раздел ниже 👇
+                    """);
             return;
         }
 
@@ -86,36 +96,36 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         }
 
         if (text != null && text.startsWith("/menu")) {
-            sendMainMenu(user, "Главное меню:");
+            sendMainMenu(user, "🏠 Главное меню:");
             return;
         }
 
-        sendMainMenu(user, "Используйте кнопки ниже для работы в системе:");
+        sendMainMenu(user, "✨ Используйте кнопки ниже для работы в системе:");
     }
 
     private void handleStateInput(User user, Message message, StateStore.State state) throws TelegramApiException {
         switch (state.state()) {
             case STATE_AWAIT_EMAIL -> {
                 if (!message.hasText()) {
-                    sendText(user.tgId(), "Отправьте e-mail текстом.", backMenuKeyboard());
+                    sendText(user.tgId(), "📧 Отправьте e-mail текстом.", backMenuKeyboard());
                     return;
                 }
                 service.setEmail(user, message.getText().trim());
                 stateStore.clearState(user.tgId());
-                sendMainMenu(service.refreshUser(user), "E-mail сохранен.");
+                sendMainMenu(service.refreshUser(user), "✅ E-mail сохранен.");
             }
             case STATE_AWAIT_PAYMENT -> {
                 if (!message.hasText()) {
-                    sendText(user.tgId(), "Отправьте платежные реквизиты текстом.", backMenuKeyboard());
+                    sendText(user.tgId(), "💳 Отправьте платежные реквизиты текстом.", backMenuKeyboard());
                     return;
                 }
                 service.setPaymentDetails(user, message.getText().trim());
                 stateStore.clearState(user.tgId());
-                sendMainMenu(service.refreshUser(user), "Платежные реквизиты сохранены.");
+                sendMainMenu(service.refreshUser(user), "✅ Платежные реквизиты сохранены.");
             }
             case STATE_AWAIT_PROOF -> {
                 if (!message.hasPhoto() && !message.hasDocument()) {
-                    sendText(user.tgId(), "Отправьте чек файлом или фото.", backMenuKeyboard());
+                    sendText(user.tgId(), "🧾 Отправьте чек файлом или фото.", backMenuKeyboard());
                     return;
                 }
 
@@ -124,14 +134,14 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                     level = Integer.parseInt(state.payload());
                 } catch (Exception e) {
                     stateStore.clearState(user.tgId());
-                    sendMainMenu(user, "Ошибка состояния. Начните покупку уровня заново.");
+                    sendMainMenu(user, "⚠️ Ошибка состояния. Начните покупку уровня заново.");
                     return;
                 }
 
                 int next = service.getNextLevel(user);
                 if (level != next) {
                     stateStore.clearState(user.tgId());
-                    sendMainMenu(user, "Текущий чек не соответствует следующему уровню. Запустите покупку заново.");
+                    sendMainMenu(user, "⚠️ Чек не соответствует следующему уровню. Запустите покупку заново.");
                     return;
                 }
 
@@ -162,14 +172,14 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 User seller = service.getUserById(sale.sellerUserId());
                 sendText(
                         user.tgId(),
-                        "Чек отправлен на проверку. После подтверждения уровень будет активирован.",
+                        "✅ Чек отправлен на проверку. После подтверждения уровень будет активирован.",
                         mainMenuKeyboard(service.refreshUser(user))
                 );
                 notifyReviewers(sale, seller, user);
             }
             default -> {
                 stateStore.clearState(user.tgId());
-                sendMainMenu(user, "Состояние очищено. Продолжайте через меню.");
+                sendMainMenu(user, "ℹ️ Состояние очищено. Продолжайте через меню.");
             }
         }
     }
@@ -202,12 +212,12 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         );
 
         if (data == null) {
-            answerCallback(callbackQuery.getId(), "Пустая команда");
+            answerCallback(callbackQuery.getId(), "⚠️ Пустая команда");
             return;
         }
 
         switch (data) {
-            case "menu" -> sendMainMenu(user, "Главное меню:");
+            case "menu" -> sendMainMenu(user, "🏠 Главное меню:");
             case "team" -> sendTeam(user);
             case "invite" -> sendInvite(user);
             case "progress" -> sendProgress(user);
@@ -217,11 +227,11 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
             case "payment" -> sendPaymentProfile(user);
             case "set_email" -> {
                 stateStore.setState(user.tgId(), STATE_AWAIT_EMAIL, null);
-                sendText(user.tgId(), "Отправьте e-mail одним сообщением.", backMenuKeyboard());
+                sendText(user.tgId(), "📧 Отправьте e-mail одним сообщением.", backMenuKeyboard());
             }
             case "set_payment" -> {
                 stateStore.setState(user.tgId(), STATE_AWAIT_PAYMENT, null);
-                sendText(user.tgId(), "Отправьте платежные реквизиты (банк, номер карты/счета, ФИО и пр.).", backMenuKeyboard());
+                sendText(user.tgId(), "💳 Отправьте платежные реквизиты (банк, карта/счет, ФИО и т.д.).", backMenuKeyboard());
             }
             case "pending" -> sendPendingPayments(user);
             case "admin" -> sendAdminPanel(user);
@@ -235,12 +245,12 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 } else if (data.startsWith("sale_no:")) {
                     rejectSale(user, data);
                 } else {
-                    sendText(user.tgId(), "Неизвестная команда.", mainMenuKeyboard(user));
+                    sendText(user.tgId(), "⚠️ Неизвестная команда.", mainMenuKeyboard(user));
                 }
             }
         }
 
-        answerCallback(callbackQuery.getId(), "OK");
+        answerCallback(callbackQuery.getId(), "✅");
     }
 
     private void sendTeam(User user) throws TelegramApiException {
@@ -248,7 +258,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         int direct = service.countDirectReferrals(user);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Ваша команда\n");
+        sb.append("👥 Ваша команда\n");
         sb.append("Прямых участников: ").append(direct).append("\n\n");
         if (team.isEmpty()) {
             sb.append("Пока нет приглашенных пользователей.");
@@ -266,8 +276,8 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         int limit = service.getDirectReferralLimit(user);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Приглашение участника\n\n");
-        sb.append("Ваша ссылка:\n").append(service.getInviteLink(user)).append("\n\n");
+        sb.append("🔗 Приглашение участника\n\n");
+        sb.append("Ваша реферальная ссылка:\n").append(service.getInviteLink(user)).append("\n\n");
         if (limit == Integer.MAX_VALUE) {
             sb.append("Лимит приглашений на 1-й уровень: без ограничений.");
         } else {
@@ -285,7 +295,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         int next = service.getNextLevel(user);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Ваш прогресс\n\n");
+        sb.append("📈 Ваш прогресс\n\n");
         sb.append("Текущий открытый уровень: ").append(user.purchasedLevel()).append("\n");
         sb.append("Приглашено напрямую: ").append(service.countDirectReferrals(user)).append("\n");
 
@@ -318,16 +328,16 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         User mentor = service.findMentorForLevel(user, next).orElseThrow();
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Покупка уровня ").append(next).append("\n\n");
+        sb.append("🛒 Покупка уровня ").append(next).append("\n\n");
         sb.append("Наставник для оплаты: ").append(displayUser(mentor)).append("\n");
         sb.append("Telegram: ").append(telegramContact(mentor)).append("\n");
         sb.append("E-mail: ").append(nullToDash(mentor.email())).append("\n");
         sb.append("Платежные реквизиты: ").append(nullToDash(mentor.paymentDetails())).append("\n\n");
-        sb.append("После оплаты загрузите чек кнопкой ниже.");
+        sb.append("После оплаты загрузите чек кнопкой ниже 👇");
 
         InlineKeyboardMarkup kb = new InlineKeyboardMarkup(List.of(
-                List.of(button("Загрузить чек", "proof_start:" + next)),
-                List.of(button("Назад", "menu"))
+                List.of(button("🧾 Загрузить чек", "proof_start:" + next)),
+                List.of(button("⬅️ Назад", "menu"))
         ));
 
         sendText(user.tgId(), sb.toString(), kb);
@@ -347,7 +357,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         }
 
         User mentor = mentorOpt.get();
-        String text = "Контакты наставника для уровня " + next + "\n\n"
+        String text = "📇 Контакты наставника для уровня " + next + "\n\n"
                 + "Имя: " + displayUser(mentor) + "\n"
                 + "Telegram: " + telegramContact(mentor) + "\n"
                 + "E-mail: " + nullToDash(mentor.email()) + "\n"
@@ -357,20 +367,20 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
     }
 
     private void sendSupport(User user) throws TelegramApiException {
-        sendText(user.tgId(), "Поддержка: " + config.supportContact(), backMenuKeyboard());
+        sendText(user.tgId(), "🛟 Поддержка: " + config.supportContact(), backMenuKeyboard());
     }
 
     private void sendPaymentProfile(User user) throws TelegramApiException {
         user = service.refreshUser(user);
-        String text = "Ваши платежные данные\n\n"
+        String text = "💼 Ваши платежные данные\n\n"
                 + "E-mail: " + nullToDash(user.email()) + "\n"
                 + "Реквизиты: " + nullToDash(user.paymentDetails()) + "\n\n"
                 + "Заполните их, чтобы участники могли переводить оплату напрямую.";
 
         InlineKeyboardMarkup kb = new InlineKeyboardMarkup(List.of(
-                List.of(button("Изменить e-mail", "set_email")),
-                List.of(button("Изменить реквизиты", "set_payment")),
-                List.of(button("Назад", "menu"))
+                List.of(button("✏️ Изменить e-mail", "set_email")),
+                List.of(button("✏️ Изменить реквизиты", "set_payment")),
+                List.of(button("⬅️ Назад", "menu"))
         ));
 
         sendText(user.tgId(), text, kb);
@@ -379,11 +389,11 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
     private void sendPendingPayments(User user) throws TelegramApiException {
         List<Sale> pending = service.listPendingForUser(user, 20);
         if (pending.isEmpty()) {
-            sendText(user.tgId(), "Новых оплат нет.", backMenuKeyboard());
+            sendText(user.tgId(), "💤 Новых оплат нет.", backMenuKeyboard());
             return;
         }
 
-        sendText(user.tgId(), "Найдено заявок: " + pending.size(), backMenuKeyboard());
+        sendText(user.tgId(), "💸 Найдено заявок: " + pending.size(), backMenuKeyboard());
         for (Sale sale : pending) {
             User seller = service.getUserById(sale.sellerUserId());
             User buyer = service.getUserById(sale.buyerUserId());
@@ -394,29 +404,29 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
 
     private void sendAdminPanel(User user) throws TelegramApiException {
         if (!service.isAdmin(user)) {
-            sendText(user.tgId(), "Нет доступа.", backMenuKeyboard());
+            sendText(user.tgId(), "⛔ Нет доступа.", backMenuKeyboard());
             return;
         }
 
         InlineKeyboardMarkup kb = new InlineKeyboardMarkup(List.of(
-                List.of(button("Новые оплаты", "pending")),
-                List.of(button("Список участников", "admin_users")),
-                List.of(button("Статистика", "admin_stats")),
-                List.of(button("Назад", "menu"))
+                List.of(button("💸 Новые оплаты", "pending")),
+                List.of(button("🧾 Список участников", "admin_users")),
+                List.of(button("📊 Статистика", "admin_stats")),
+                List.of(button("⬅️ Назад", "menu"))
         ));
 
-        sendText(user.tgId(), "Админ-панель", kb);
+        sendText(user.tgId(), "🛠 Админ-панель", kb);
     }
 
     private void sendAdminUsers(User user) throws TelegramApiException {
         if (!service.isAdmin(user)) {
-            sendText(user.tgId(), "Нет доступа.", backMenuKeyboard());
+            sendText(user.tgId(), "⛔ Нет доступа.", backMenuKeyboard());
             return;
         }
 
         List<User> users = service.listRecentUsers(30);
         StringBuilder sb = new StringBuilder();
-        sb.append("Последние участники\n\n");
+        sb.append("🧾 Последние участники\n\n");
         for (User u : users) {
             sb.append("- id=").append(u.id())
                     .append(", ").append(displayUser(u))
@@ -430,11 +440,11 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
 
     private void sendAdminStats(User user) throws TelegramApiException {
         if (!service.isAdmin(user)) {
-            sendText(user.tgId(), "Нет доступа.", backMenuKeyboard());
+            sendText(user.tgId(), "⛔ Нет доступа.", backMenuKeyboard());
             return;
         }
 
-        String text = "Статистика\n\n"
+        String text = "📊 Статистика\n\n"
                 + "Всего участников: " + service.countAllUsers() + "\n"
                 + "Всего заявок на оплаты: " + service.countAllSales() + "\n"
                 + "Ожидают проверки: " + service.countPendingSales();
@@ -445,7 +455,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
     private void startProofUpload(User user, String data) throws TelegramApiException {
         int level = parseIntId(data, "proof_start:");
         if (level <= 0) {
-            sendText(user.tgId(), "Некорректный уровень.", backMenuKeyboard());
+            sendText(user.tgId(), "⚠️ Некорректный уровень.", backMenuKeyboard());
             return;
         }
 
@@ -457,35 +467,35 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
 
         int next = service.getNextLevel(user);
         if (level != next) {
-            sendText(user.tgId(), "Можно загрузить чек только для следующего уровня: " + next, backMenuKeyboard());
+            sendText(user.tgId(), "⚠️ Можно загрузить чек только для следующего уровня: " + next, backMenuKeyboard());
             return;
         }
 
         stateStore.setState(user.tgId(), STATE_AWAIT_PROOF, String.valueOf(level));
-        sendText(user.tgId(), "Отправьте фото или файл чека одним сообщением.", backMenuKeyboard());
+        sendText(user.tgId(), "🧾 Отправьте фото или файл чека одним сообщением.", backMenuKeyboard());
     }
 
     private void approveSale(User user, String data) throws TelegramApiException {
         long saleId = parseLongId(data, "sale_ok:");
         if (saleId <= 0) {
-            sendText(user.tgId(), "Некорректный id заявки.", backMenuKeyboard());
+            sendText(user.tgId(), "⚠️ Некорректный id заявки.", backMenuKeyboard());
             return;
         }
 
         Optional<Sale> saleOpt = service.findSale(saleId);
         if (saleOpt.isEmpty()) {
-            sendText(user.tgId(), "Заявка не найдена.", backMenuKeyboard());
+            sendText(user.tgId(), "⚠️ Заявка не найдена.", backMenuKeyboard());
             return;
         }
 
         Sale sale = saleOpt.get();
         if (sale.status() != SaleStatus.PENDING) {
-            sendText(user.tgId(), "Заявка уже обработана.", backMenuKeyboard());
+            sendText(user.tgId(), "ℹ️ Заявка уже обработана.", backMenuKeyboard());
             return;
         }
 
         if (!service.canReviewSale(user, sale)) {
-            sendText(user.tgId(), "Нет прав на подтверждение этой заявки.", backMenuKeyboard());
+            sendText(user.tgId(), "⛔ Нет прав на подтверждение этой заявки.", backMenuKeyboard());
             return;
         }
 
@@ -495,37 +505,37 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         User seller = service.getUserById(sale.sellerUserId());
         sendText(
                 buyer.tgId(),
-                "Оплата подтверждена. Уровень " + sale.level() + " активирован.",
+                "✅ Оплата подтверждена. Уровень " + sale.level() + " активирован.",
                 mainMenuKeyboard(service.refreshUser(buyer))
         );
-        sendText(seller.tgId(), "Вы подтвердили оплату по заявке #" + sale.id(), backMenuKeyboard());
+        sendText(seller.tgId(), "✅ Вы подтвердили оплату по заявке #" + sale.id(), backMenuKeyboard());
 
         if (service.isAdmin(user) && user.id() != seller.id()) {
-            sendText(user.tgId(), "Заявка #" + sale.id() + " подтверждена.", backMenuKeyboard());
+            sendText(user.tgId(), "✅ Заявка #" + sale.id() + " подтверждена.", backMenuKeyboard());
         }
     }
 
     private void rejectSale(User user, String data) throws TelegramApiException {
         long saleId = parseLongId(data, "sale_no:");
         if (saleId <= 0) {
-            sendText(user.tgId(), "Некорректный id заявки.", backMenuKeyboard());
+            sendText(user.tgId(), "⚠️ Некорректный id заявки.", backMenuKeyboard());
             return;
         }
 
         Optional<Sale> saleOpt = service.findSale(saleId);
         if (saleOpt.isEmpty()) {
-            sendText(user.tgId(), "Заявка не найдена.", backMenuKeyboard());
+            sendText(user.tgId(), "⚠️ Заявка не найдена.", backMenuKeyboard());
             return;
         }
 
         Sale sale = saleOpt.get();
         if (sale.status() != SaleStatus.PENDING) {
-            sendText(user.tgId(), "Заявка уже обработана.", backMenuKeyboard());
+            sendText(user.tgId(), "ℹ️ Заявка уже обработана.", backMenuKeyboard());
             return;
         }
 
         if (!service.canReviewSale(user, sale)) {
-            sendText(user.tgId(), "Нет прав на отклонение этой заявки.", backMenuKeyboard());
+            sendText(user.tgId(), "⛔ Нет прав на отклонение этой заявки.", backMenuKeyboard());
             return;
         }
 
@@ -534,10 +544,10 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         User buyer = service.getUserById(sale.buyerUserId());
         sendText(
                 buyer.tgId(),
-                "Оплата по заявке #" + sale.id() + " отклонена. Проверьте реквизиты и отправьте чек заново.",
+                "❌ Оплата по заявке #" + sale.id() + " отклонена. Проверьте реквизиты и отправьте чек заново.",
                 mainMenuKeyboard(service.refreshUser(buyer))
         );
-        sendText(user.tgId(), "Заявка #" + sale.id() + " отклонена.", backMenuKeyboard());
+        sendText(user.tgId(), "❌ Заявка #" + sale.id() + " отклонена.", backMenuKeyboard());
     }
 
     private void sendProofWithCaption(long chatId, Sale sale, String caption, InlineKeyboardMarkup kb) throws TelegramApiException {
@@ -559,7 +569,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
     }
 
     private String buildSaleReviewText(Sale sale, User seller, User buyer) {
-        return "Заявка #" + sale.id() + "\n"
+        return "🧾 Заявка #" + sale.id() + "\n"
                 + "Уровень: " + sale.level() + "\n"
                 + "Покупатель: " + displayUser(buyer) + " (tgId=" + buyer.tgId() + ")\n"
                 + "Наставник: " + displayUser(seller) + " (tgId=" + seller.tgId() + ")\n"
@@ -568,27 +578,27 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
 
     private InlineKeyboardMarkup mainMenuKeyboard(User user) {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-        rows.add(List.of(button("Моя команда", "team"), button("Пригласить человека", "invite")));
-        rows.add(List.of(button("Мой прогресс", "progress"), button("Купить уровень", "buy")));
-        rows.add(List.of(button("Контакты наставника", "mentor_contacts"), button("Мои платежные данные", "payment")));
-        rows.add(List.of(button("Новые оплаты", "pending")));
-        rows.add(List.of(button("Поддержка", "support")));
+        rows.add(List.of(button("👥 Моя команда", "team"), button("🔗 Пригласить", "invite")));
+        rows.add(List.of(button("📈 Мой прогресс", "progress"), button("🛒 Купить уровень", "buy")));
+        rows.add(List.of(button("📇 Контакты наставника", "mentor_contacts"), button("💼 Мои платежные данные", "payment")));
+        rows.add(List.of(button("💸 Новые оплаты", "pending")));
+        rows.add(List.of(button("🛟 Поддержка", "support")));
 
         if (service.isAdmin(user)) {
-            rows.add(List.of(button("Админ-панель", "admin")));
+            rows.add(List.of(button("🛠 Админ-панель", "admin")));
         }
 
         return new InlineKeyboardMarkup(rows);
     }
 
     private InlineKeyboardMarkup backMenuKeyboard() {
-        return new InlineKeyboardMarkup(List.of(List.of(button("В меню", "menu"))));
+        return new InlineKeyboardMarkup(List.of(List.of(button("🏠 В меню", "menu"))));
     }
 
     private InlineKeyboardMarkup saleReviewKeyboard(long saleId) {
         return new InlineKeyboardMarkup(List.of(
-                List.of(button("Подтвердить", "sale_ok:" + saleId), button("Отклонить", "sale_no:" + saleId)),
-                List.of(button("В меню", "menu"))
+                List.of(button("✅ Подтвердить", "sale_ok:" + saleId), button("❌ Отклонить", "sale_no:" + saleId)),
+                List.of(button("🏠 В меню", "menu"))
         ));
     }
 

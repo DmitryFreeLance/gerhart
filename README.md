@@ -40,6 +40,7 @@ docker build -t telegram-mlm-bot .
 ```bash
 docker run -d \
   --name telegram-mlm-bot \
+  --restart unless-stopped \
   -e BOT_TOKEN="<TOKEN>" \
   -e BOT_USERNAME="<BOT_USERNAME>" \
   -e ADMIN_IDS="123456789" \

@@ -187,11 +187,22 @@ public class UserDao {
                 rs.getLong("tg_id"),
                 rs.getString("username"),
                 rs.getString("first_name"),
-                (Long) rs.getObject("sponsor_user_id"),
+                getNullableLong(rs, "sponsor_user_id"),
                 rs.getInt("purchased_level"),
                 Role.valueOf(rs.getString("role")),
                 rs.getString("email"),
                 rs.getString("payment_details")
         );
+    }
+
+    private Long getNullableLong(ResultSet rs, String column) throws SQLException {
+        Object value = rs.getObject(column);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.parseLong(String.valueOf(value));
     }
 }

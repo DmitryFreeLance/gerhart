@@ -179,9 +179,20 @@ public class SaleDao {
                 rs.getString("proof_type"),
                 rs.getString("proof_file_id"),
                 rs.getLong("created_at"),
-                (Long) rs.getObject("reviewer_user_id"),
-                (Long) rs.getObject("reviewed_at"),
+                getNullableLong(rs, "reviewer_user_id"),
+                getNullableLong(rs, "reviewed_at"),
                 rs.getString("rejection_reason")
         );
+    }
+
+    private Long getNullableLong(ResultSet rs, String column) throws SQLException {
+        Object value = rs.getObject(column);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.parseLong(String.valueOf(value));
     }
 }
