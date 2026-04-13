@@ -42,10 +42,16 @@ public class BotService {
     }
 
     public int getDirectReferralLimit(User user) {
+        if (user.purchasedLevel() < 1) {
+            return 0;
+        }
         return user.purchasedLevel() >= 2 ? Integer.MAX_VALUE : 3;
     }
 
     public boolean canAcceptNewDirectReferral(User user) {
+        if (user.purchasedLevel() < 1) {
+            return false;
+        }
         if (user.purchasedLevel() >= 2) {
             return true;
         }
@@ -58,15 +64,24 @@ public class BotService {
     }
 
     public Optional<User> findMentorForLevel(User buyer, int level) {
-        if (level <= 1) {
+        if (level == 1) {
+            if (buyer.sponsorUserId() == null) {
+                return Optional.empty();
+            }
+            return userDao.findById(buyer.sponsorUserId());
+        }
+        if (level < 1) {
             return Optional.empty();
         }
         return userDao.findUplineByDistance(buyer.id(), level - 1);
     }
 
     public boolean canSellerSellLevel(User seller, int level) {
-        if (level < 2 || level > config.maxLevel()) {
+        if (level < 1 || level > config.maxLevel()) {
             return false;
+        }
+        if (level == 1) {
+            return seller.purchasedLevel() >= 1 && canAcceptNewDirectReferral(seller);
         }
         if (seller.purchasedLevel() < level) {
             return false;

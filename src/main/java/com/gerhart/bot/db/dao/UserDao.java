@@ -50,7 +50,7 @@ public class UserDao {
     }
 
     public User create(long tgId, String username, String firstName, Long sponsorUserId, Role role) {
-        String sql = "INSERT INTO users(tg_id, username, first_name, sponsor_user_id, purchased_level, role) VALUES(?, ?, ?, ?, 1, ?)";
+        String sql = "INSERT INTO users(tg_id, username, first_name, sponsor_user_id, purchased_level, role) VALUES(?, ?, ?, ?, 0, ?)";
         try (Connection conn = database.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, tgId);
             ps.setString(2, username);
@@ -114,7 +114,7 @@ public class UserDao {
     }
 
     public int countDirectReferrals(long sponsorUserId) {
-        String sql = "SELECT COUNT(*) FROM users WHERE sponsor_user_id = ?";
+        String sql = "SELECT COUNT(*) FROM users WHERE sponsor_user_id = ? AND purchased_level >= 1";
         try (Connection conn = database.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, sponsorUserId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -126,7 +126,7 @@ public class UserDao {
     }
 
     public List<User> getDirectReferrals(long sponsorUserId, int limit) {
-        String sql = "SELECT * FROM users WHERE sponsor_user_id = ? ORDER BY id DESC LIMIT ?";
+        String sql = "SELECT * FROM users WHERE sponsor_user_id = ? AND purchased_level >= 1 ORDER BY id DESC LIMIT ?";
         try (Connection conn = database.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, sponsorUserId);
             ps.setInt(2, limit);

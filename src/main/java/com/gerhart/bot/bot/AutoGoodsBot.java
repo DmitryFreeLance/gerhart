@@ -278,7 +278,10 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         StringBuilder sb = new StringBuilder();
         sb.append("🔗 Приглашение участника\n\n");
         sb.append("Ваша реферальная ссылка:\n").append(service.getInviteLink(user)).append("\n\n");
-        if (limit == Integer.MAX_VALUE) {
+        if (limit == 0) {
+            sb.append("Сначала активируйте 1-й уровень через покупку товара у наставника.\n");
+            sb.append("После подтверждения оплаты откроется приглашение участников.");
+        } else if (limit == Integer.MAX_VALUE) {
             sb.append("Лимит приглашений на 1-й уровень: без ограничений.");
         } else {
             sb.append("Лимит приглашений на 1-й уровень: ").append(direct).append("/").append(limit).append(".");
@@ -298,6 +301,9 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         sb.append("📈 Ваш прогресс\n\n");
         sb.append("Текущий открытый уровень: ").append(user.purchasedLevel()).append("\n");
         sb.append("Приглашено напрямую: ").append(service.countDirectReferrals(user)).append("\n");
+        if (user.purchasedLevel() == 0) {
+            sb.append("🔒 1-й уровень еще не активирован. Сначала оплатите товар 1-го уровня.\n");
+        }
 
         if (next != -1) {
             int sold = service.countConfirmedSalesAtLevel(user, next);
@@ -332,7 +338,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         sb.append("Наставник для оплаты: ").append(displayUser(mentor)).append("\n");
         sb.append("Telegram: ").append(telegramContact(mentor)).append("\n");
         sb.append("E-mail: ").append(nullToDash(mentor.email())).append("\n");
-        sb.append("Платежные реквизиты: ").append(nullToDash(mentor.paymentDetails())).append("\n\n");
+        sb.append("\nРеквизиты наставник отправит вам лично в чате после обращения.\n");
         sb.append("После оплаты загрузите чек кнопкой ниже 👇");
 
         InlineKeyboardMarkup kb = new InlineKeyboardMarkup(List.of(
@@ -360,8 +366,8 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         String text = "📇 Контакты наставника для уровня " + next + "\n\n"
                 + "Имя: " + displayUser(mentor) + "\n"
                 + "Telegram: " + telegramContact(mentor) + "\n"
-                + "E-mail: " + nullToDash(mentor.email()) + "\n"
-                + "Реквизиты: " + nullToDash(mentor.paymentDetails());
+                + "E-mail: " + nullToDash(mentor.email()) + "\n\n"
+                + "ℹ️ Актуальные реквизиты наставник отправит вам лично.";
 
         sendText(user.tgId(), text, backMenuKeyboard());
     }
