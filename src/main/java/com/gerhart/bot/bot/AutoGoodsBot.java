@@ -223,8 +223,8 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
             case "progress" -> sendProgress(user);
             case "buy" -> sendBuyLevel(user);
             case "mentor_contacts" -> sendMentorContacts(user);
+            case "mentor_unreachable" -> escalateMentor(user);
             case "support" -> sendSupport(user);
-            case "payment" -> sendPaymentProfile(user);
             case "set_email" -> {
                 stateStore.setState(user.tgId(), STATE_AWAIT_EMAIL, null);
                 sendText(user.tgId(), "📧 Отправьте e-mail одним сообщением.", backMenuKeyboard());
@@ -234,6 +234,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 sendText(user.tgId(), "💳 Отправьте платежные реквизиты (банк, карта/счет, ФИО и т.д.).", backMenuKeyboard());
             }
             case "pending" -> sendPendingPayments(user);
+            case "about" -> sendAbout(user);
             case "admin" -> sendAdminPanel(user);
             case "admin_users" -> sendAdminUsers(user);
             case "admin_stats" -> sendAdminStats(user);
@@ -343,6 +344,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
 
         InlineKeyboardMarkup kb = new InlineKeyboardMarkup(List.of(
                 List.of(button("🧾 Загрузить чек", "proof_start:" + next)),
+                List.of(button("🚨 Наставник не выходит на связь", "mentor_unreachable")),
                 List.of(button("⬅️ Назад", "menu"))
         ));
 
@@ -372,8 +374,53 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         sendText(user.tgId(), text, backMenuKeyboard());
     }
 
+    private void escalateMentor(User user) throws TelegramApiException {
+        user = service.refreshUser(user);
+        int nextLevel = service.getNextLevel(user);
+        if (nextLevel == -1) {
+            sendText(user.tgId(), "ℹ️ У вас уже максимальный уровень.", backMenuKeyboard());
+            return;
+        }
+
+        Optional<BotService.EscalationResult> resultOpt = service.escalateMentor(user, nextLevel);
+        if (resultOpt.isEmpty()) {
+            sendText(user.tgId(), "⚠️ Не удалось найти наставника уровнем выше. Обратитесь в поддержку.", backMenuKeyboard());
+            return;
+        }
+
+        BotService.EscalationResult result = resultOpt.get();
+        User previous = result.previousMentor();
+        User newMentor = result.newMentor();
+
+        String text = "✅ Запрос эскалации выполнен.\n\n"
+                + "Предыдущий наставник: " + displayUser(previous) + "\n"
+                + "Новый наставник: " + displayUser(newMentor) + "\n"
+                + "Telegram: " + telegramContact(newMentor) + "\n"
+                + "E-mail: " + nullToDash(newMentor.email()) + "\n\n"
+                + "Свяжитесь с новым наставником для получения актуальных реквизитов.";
+        sendText(user.tgId(), text, backMenuKeyboard());
+
+        String notifyText = "🚨 Участник " + displayUser(user) + " (tgId=" + user.tgId() + ") сообщил, что наставник "
+                + displayUser(previous) + " не выходит на связь по уровню " + nextLevel + ".\n"
+                + "Пожалуйста, помогите связаться и провести оплату.";
+        sendText(newMentor.tgId(), notifyText, backMenuKeyboard());
+    }
+
     private void sendSupport(User user) throws TelegramApiException {
         sendText(user.tgId(), "🛟 Поддержка: " + config.supportContact(), backMenuKeyboard());
+    }
+
+    private void sendAbout(User user) throws TelegramApiException {
+        String text = """
+                ℹ️ О проекте
+
+                Это система командных продаж автотоваров с уровнями.
+                Сначала активируется 1-й уровень через подтвержденную оплату,
+                затем открываются приглашения и рост по следующим уровням.
+
+                Скоро здесь будет опубликовано подробное описание правил проекта.
+                """;
+        sendText(user.tgId(), text, backMenuKeyboard());
     }
 
     private void sendPaymentProfile(User user) throws TelegramApiException {
@@ -586,8 +633,9 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         rows.add(List.of(button("👥 Моя команда", "team"), button("🔗 Пригласить", "invite")));
         rows.add(List.of(button("📈 Мой прогресс", "progress"), button("🛒 Купить уровень", "buy")));
-        rows.add(List.of(button("📇 Контакты наставника", "mentor_contacts"), button("💼 Мои платежные данные", "payment")));
-        rows.add(List.of(button("💸 Новые оплаты", "pending")));
+        rows.add(List.of(button("📇 Контакты наставника", "mentor_contacts"), button("🚨 Наставник не выходит на связь", "mentor_unreachable")));
+        rows.add(List.of(button("💸 Новые оплаты (проверка)", "pending")));
+        rows.add(List.of(button("ℹ️ О проекте", "about")));
         rows.add(List.of(button("🛟 Поддержка", "support")));
 
         if (service.isAdmin(user)) {

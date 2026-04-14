@@ -1,6 +1,7 @@
 package com.gerhart.bot.service;
 
 import com.gerhart.bot.config.AppConfig;
+import com.gerhart.bot.db.dao.MentorOverrideDao;
 import com.gerhart.bot.db.dao.SaleDao;
 import com.gerhart.bot.db.dao.UserDao;
 import com.gerhart.bot.model.Role;
@@ -13,11 +14,13 @@ import java.util.Optional;
 public class BotService {
     private final UserDao userDao;
     private final SaleDao saleDao;
+    private final MentorOverrideDao mentorOverrideDao;
     private final AppConfig config;
 
-    public BotService(UserDao userDao, SaleDao saleDao, AppConfig config) {
+    public BotService(UserDao userDao, SaleDao saleDao, MentorOverrideDao mentorOverrideDao, AppConfig config) {
         this.userDao = userDao;
         this.saleDao = saleDao;
+        this.mentorOverrideDao = mentorOverrideDao;
         this.config = config;
     }
 
@@ -64,16 +67,33 @@ public class BotService {
     }
 
     public Optional<User> findMentorForLevel(User buyer, int level) {
-        if (level == 1) {
-            if (buyer.sponsorUserId() == null) {
-                return Optional.empty();
+        Optional<Long> overrideSellerId = mentorOverrideDao.findOverrideSellerId(buyer.id(), level);
+        if (overrideSellerId.isPresent()) {
+            Optional<User> overrideSeller = userDao.findById(overrideSellerId.get());
+            if (overrideSeller.isPresent() && canSellerSellLevel(overrideSeller.get(), level)) {
+                return overrideSeller;
             }
-            return userDao.findById(buyer.sponsorUserId());
         }
+
         if (level < 1) {
             return Optional.empty();
         }
-        return userDao.findUplineByDistance(buyer.id(), level - 1);
+
+        Optional<User> current = userDao.findById(buyer.id());
+        int depth = 0;
+        while (current.isPresent() && current.get().sponsorUserId() != null) {
+            User sponsor = userDao.findById(current.get().sponsorUserId()).orElse(null);
+            if (sponsor == null) {
+                return Optional.empty();
+            }
+
+            depth++;
+            if (depth >= (level - 1) && canSellerSellLevel(sponsor, level)) {
+                return Optional.of(sponsor);
+            }
+            current = Optional.of(sponsor);
+        }
+        return Optional.empty();
     }
 
     public boolean canSellerSellLevel(User seller, int level) {
@@ -195,6 +215,28 @@ public class BotService {
         return userDao.findById(id).orElseThrow();
     }
 
+    public Optional<EscalationResult> escalateMentor(User buyer, int level) {
+        Optional<User> currentMentorOpt = findMentorForLevel(buyer, level);
+        if (currentMentorOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        User currentMentor = currentMentorOpt.get();
+        User cursor = currentMentor;
+        while (cursor.sponsorUserId() != null) {
+            User candidate = userDao.findById(cursor.sponsorUserId()).orElse(null);
+            if (candidate == null) {
+                break;
+            }
+            if (canSellerSellLevel(candidate, level)) {
+                mentorOverrideDao.upsertOverride(buyer.id(), level, candidate.id());
+                return Optional.of(new EscalationResult(currentMentor, candidate));
+            }
+            cursor = candidate;
+        }
+        return Optional.empty();
+    }
+
     private Long resolveSponsorUserId(String startPayload) {
         if (startPayload == null || startPayload.isBlank() || !startPayload.startsWith("ref_")) {
             return null;
@@ -215,5 +257,8 @@ public class BotService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    public record EscalationResult(User previousMentor, User newMentor) {
     }
 }

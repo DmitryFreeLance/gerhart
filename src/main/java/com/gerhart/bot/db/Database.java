@@ -61,6 +61,18 @@ public class Database {
                         updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
                     )
                     """);
+
+            st.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS mentor_overrides (
+                        buyer_user_id INTEGER NOT NULL,
+                        level INTEGER NOT NULL,
+                        seller_user_id INTEGER NOT NULL,
+                        created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                        PRIMARY KEY (buyer_user_id, level),
+                        FOREIGN KEY (buyer_user_id) REFERENCES users(id),
+                        FOREIGN KEY (seller_user_id) REFERENCES users(id)
+                    )
+                    """);
         } catch (SQLException e) {
             throw new RuntimeException("Failed to initialize database", e);
         }
