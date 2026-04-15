@@ -633,7 +633,8 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         rows.add(List.of(button("👥 Моя команда", "team"), button("🔗 Пригласить", "invite")));
         rows.add(List.of(button("📈 Мой прогресс", "progress"), button("🛒 Купить уровень", "buy")));
-        rows.add(List.of(button("📇 Контакты наставника", "mentor_contacts"), button("🚨 Наставник не выходит на связь", "mentor_unreachable")));
+        rows.add(List.of(button("📇 Контакты наставника", "mentor_contacts")));
+        rows.add(List.of(button("🚨 Наставник не выходит на связь", "mentor_unreachable")));
         rows.add(List.of(button("💸 Новые оплаты (проверка)", "pending")));
         rows.add(List.of(button("ℹ️ О проекте", "about")));
         rows.add(List.of(button("🛟 Поддержка", "support")));
