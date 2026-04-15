@@ -30,6 +30,33 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
     private static final String STATE_AWAIT_EMAIL = "AWAIT_EMAIL";
     private static final String STATE_AWAIT_PAYMENT = "AWAIT_PAYMENT";
     private static final String STATE_AWAIT_PROOF = "AWAIT_PROOF";
+    private static final String STATE_AWAIT_TEXT_EDIT = "AWAIT_TEXT_EDIT";
+
+    private static final String TEXT_START = "start";
+    private static final String TEXT_ABOUT = "about";
+    private static final String TEXT_SUPPORT = "support";
+    private static final String TEXT_REF_REQUIRED = "ref_required";
+
+    private static final String DEFAULT_START_TEXT = """
+            🚗 Добро пожаловать в клуб автотоваров!
+
+            Здесь вы сможете:
+            • развивать свою команду;
+            • отслеживать прогресс по уровням;
+            • покупать новый уровень и отправлять чек;
+            • получать поддержку и понятную навигацию по проекту.
+
+            Выберите нужный раздел ниже 👇
+            """;
+    private static final String DEFAULT_ABOUT_TEXT = """
+            ℹ️ О проекте
+
+            Это система командных продаж автотоваров с уровнями.
+            Сначала активируется 1-й уровень через подтвержденную оплату,
+            затем открываются приглашения и рост по следующим уровням.
+
+            Скоро здесь будет опубликовано подробное описание правил проекта.
+            """;
 
     private final AppConfig config;
     private final BotService service;
@@ -73,19 +100,20 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 message.getFrom().getFirstName(),
                 payload
         );
+        user = service.refreshUser(user);
+
+        if (isUnauthorizedWithoutRef(user)) {
+            sendText(user.tgId(), service.getText(TEXT_REF_REQUIRED, defaultRefRequiredText()), unauthKeyboard());
+            return;
+        }
 
         if (text != null && text.startsWith("/start")) {
-            sendMainMenu(user, """
-                    🚗 Добро пожаловать в клуб автотоваров!
+            sendMainMenu(user, service.getText(TEXT_START, DEFAULT_START_TEXT));
+            return;
+        }
 
-                    Здесь вы сможете:
-                    • развивать свою команду;
-                    • отслеживать прогресс по уровням;
-                    • покупать новый уровень и отправлять чек;
-                    • получать выплаты напрямую по своим реквизитам.
-
-                    Выберите нужный раздел ниже 👇
-                    """);
+        if (text != null && text.equalsIgnoreCase("/admin")) {
+            sendAdminPanel(user);
             return;
         }
 
@@ -177,6 +205,26 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 );
                 notifyReviewers(sale, seller, user);
             }
+            case STATE_AWAIT_TEXT_EDIT -> {
+                if (!service.isAdmin(user)) {
+                    stateStore.clearState(user.tgId());
+                    sendText(user.tgId(), "⛔ Нет доступа.", backMenuKeyboard());
+                    return;
+                }
+                if (!message.hasText()) {
+                    sendText(user.tgId(), "✍️ Отправьте новый текст одним сообщением.", backMenuKeyboard());
+                    return;
+                }
+                String key = state.payload();
+                if (key == null || key.isBlank()) {
+                    stateStore.clearState(user.tgId());
+                    sendText(user.tgId(), "⚠️ Не удалось определить раздел текста.", backMenuKeyboard());
+                    return;
+                }
+                service.setText(key, message.getText().trim());
+                stateStore.clearState(user.tgId());
+                sendText(user.tgId(), "✅ Текст обновлен.", adminTextsKeyboard());
+            }
             default -> {
                 stateStore.clearState(user.tgId());
                 sendMainMenu(user, "ℹ️ Состояние очищено. Продолжайте через меню.");
@@ -210,9 +258,16 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 callbackQuery.getFrom().getFirstName(),
                 null
         );
+        user = service.refreshUser(user);
 
         if (data == null) {
             answerCallback(callbackQuery.getId(), "⚠️ Пустая команда");
+            return;
+        }
+
+        if (isUnauthorizedWithoutRef(user) && !"support".equals(data) && !"about".equals(data)) {
+            sendText(user.tgId(), service.getText(TEXT_REF_REQUIRED, defaultRefRequiredText()), unauthKeyboard());
+            answerCallback(callbackQuery.getId(), "⛔ Нужна реферальная ссылка");
             return;
         }
 
@@ -236,11 +291,14 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
             case "pending" -> sendPendingPayments(user);
             case "about" -> sendAbout(user);
             case "admin" -> sendAdminPanel(user);
+            case "admin_texts" -> sendAdminTexts(user);
             case "admin_users" -> sendAdminUsers(user);
             case "admin_stats" -> sendAdminStats(user);
             default -> {
                 if (data.startsWith("proof_start:")) {
                     startProofUpload(user, data);
+                } else if (data.startsWith("edit_text:")) {
+                    startEditText(user, data);
                 } else if (data.startsWith("sale_ok:")) {
                     approveSale(user, data);
                 } else if (data.startsWith("sale_no:")) {
@@ -407,20 +465,42 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
     }
 
     private void sendSupport(User user) throws TelegramApiException {
-        sendText(user.tgId(), "🛟 Поддержка: " + config.supportContact(), backMenuKeyboard());
+        String defaultText = "🛟 Поддержка: " + config.supportContact();
+        sendText(user.tgId(), service.getText(TEXT_SUPPORT, defaultText), backMenuKeyboard());
     }
 
     private void sendAbout(User user) throws TelegramApiException {
-        String text = """
-                ℹ️ О проекте
+        sendText(user.tgId(), service.getText(TEXT_ABOUT, DEFAULT_ABOUT_TEXT), backMenuKeyboard());
+    }
 
-                Это система командных продаж автотоваров с уровнями.
-                Сначала активируется 1-й уровень через подтвержденную оплату,
-                затем открываются приглашения и рост по следующим уровням.
+    private void sendAdminTexts(User user) throws TelegramApiException {
+        if (!service.isAdmin(user)) {
+            sendText(user.tgId(), "⛔ Нет доступа.", backMenuKeyboard());
+            return;
+        }
+        sendText(user.tgId(), "✍️ Выберите раздел, текст которого нужно изменить:", adminTextsKeyboard());
+    }
 
-                Скоро здесь будет опубликовано подробное описание правил проекта.
-                """;
-        sendText(user.tgId(), text, backMenuKeyboard());
+    private void startEditText(User user, String data) throws TelegramApiException {
+        if (!service.isAdmin(user)) {
+            sendText(user.tgId(), "⛔ Нет доступа.", backMenuKeyboard());
+            return;
+        }
+        String key = data.substring("edit_text:".length());
+        if (!List.of(TEXT_START, TEXT_ABOUT, TEXT_SUPPORT, TEXT_REF_REQUIRED).contains(key)) {
+            sendText(user.tgId(), "⚠️ Неизвестный раздел текста.", backMenuKeyboard());
+            return;
+        }
+        stateStore.setState(user.tgId(), STATE_AWAIT_TEXT_EDIT, key);
+
+        String current = switch (key) {
+            case TEXT_START -> service.getText(TEXT_START, DEFAULT_START_TEXT);
+            case TEXT_ABOUT -> service.getText(TEXT_ABOUT, DEFAULT_ABOUT_TEXT);
+            case TEXT_SUPPORT -> service.getText(TEXT_SUPPORT, "🛟 Поддержка: " + config.supportContact());
+            case TEXT_REF_REQUIRED -> service.getText(TEXT_REF_REQUIRED, defaultRefRequiredText());
+            default -> "";
+        };
+        sendText(user.tgId(), "Текущий текст:\n\n" + current + "\n\n✍️ Отправьте новый текст одним сообщением.", backMenuKeyboard());
     }
 
     private void sendPaymentProfile(User user) throws TelegramApiException {
@@ -465,6 +545,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 List.of(button("💸 Новые оплаты", "pending")),
                 List.of(button("🧾 Список участников", "admin_users")),
                 List.of(button("📊 Статистика", "admin_stats")),
+                List.of(button("✍️ Редактировать тексты", "admin_texts")),
                 List.of(button("⬅️ Назад", "menu"))
         ));
 
@@ -636,8 +717,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         rows.add(List.of(button("📇 Контакты наставника", "mentor_contacts")));
         rows.add(List.of(button("🚨 Наставник не выходит на связь", "mentor_unreachable")));
         rows.add(List.of(button("💸 Новые оплаты (проверка)", "pending")));
-        rows.add(List.of(button("ℹ️ О проекте", "about")));
-        rows.add(List.of(button("🛟 Поддержка", "support")));
+        rows.add(List.of(button("ℹ️ О проекте", "about"), button("🛟 Помощь", "support")));
 
         if (service.isAdmin(user)) {
             rows.add(List.of(button("🛠 Админ-панель", "admin")));
@@ -648,6 +728,20 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
 
     private InlineKeyboardMarkup backMenuKeyboard() {
         return new InlineKeyboardMarkup(List.of(List.of(button("🏠 В меню", "menu"))));
+    }
+
+    private InlineKeyboardMarkup unauthKeyboard() {
+        return new InlineKeyboardMarkup(List.of(List.of(button("🛟 Помощь", "support"))));
+    }
+
+    private InlineKeyboardMarkup adminTextsKeyboard() {
+        return new InlineKeyboardMarkup(List.of(
+                List.of(button("✍️ Стартовое меню", "edit_text:" + TEXT_START)),
+                List.of(button("✍️ О проекте", "edit_text:" + TEXT_ABOUT)),
+                List.of(button("✍️ Помощь", "edit_text:" + TEXT_SUPPORT)),
+                List.of(button("✍️ Текст без реф-ссылки", "edit_text:" + TEXT_REF_REQUIRED)),
+                List.of(button("⬅️ В админ-панель", "admin"))
+        ));
     }
 
     private InlineKeyboardMarkup saleReviewKeyboard(long saleId) {
@@ -729,5 +823,18 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
 
     private String nullToDash(String value) {
         return value == null || value.isBlank() ? "не указано" : value;
+    }
+
+    private boolean isUnauthorizedWithoutRef(User user) {
+        return !service.isAdmin(user)
+                && user.sponsorUserId() == null
+                && user.purchasedLevel() <= 0;
+    }
+
+    private String defaultRefRequiredText() {
+        return """
+                Для пользования ботом необходима реферальная ссылка.
+                по всем вопросам: @Gerhard_Stein
+                """;
     }
 }

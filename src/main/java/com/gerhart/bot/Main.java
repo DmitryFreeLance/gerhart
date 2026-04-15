@@ -3,6 +3,7 @@ package com.gerhart.bot;
 import com.gerhart.bot.bot.AutoGoodsBot;
 import com.gerhart.bot.config.AppConfig;
 import com.gerhart.bot.db.Database;
+import com.gerhart.bot.db.dao.AppTextDao;
 import com.gerhart.bot.db.dao.MentorOverrideDao;
 import com.gerhart.bot.db.dao.SaleDao;
 import com.gerhart.bot.db.dao.UserDao;
@@ -21,8 +22,9 @@ public class Main {
         UserDao userDao = new UserDao(database);
         SaleDao saleDao = new SaleDao(database);
         MentorOverrideDao mentorOverrideDao = new MentorOverrideDao(database);
+        AppTextDao appTextDao = new AppTextDao(database);
         StateStore stateStore = new StateStore(database);
-        BotService service = new BotService(userDao, saleDao, mentorOverrideDao, config);
+        BotService service = new BotService(userDao, saleDao, mentorOverrideDao, appTextDao, config);
 
         TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
         botsApi.registerBot(new AutoGoodsBot(config, service, stateStore));

@@ -1,6 +1,7 @@
 package com.gerhart.bot.service;
 
 import com.gerhart.bot.config.AppConfig;
+import com.gerhart.bot.db.dao.AppTextDao;
 import com.gerhart.bot.db.dao.MentorOverrideDao;
 import com.gerhart.bot.db.dao.SaleDao;
 import com.gerhart.bot.db.dao.UserDao;
@@ -15,12 +16,14 @@ public class BotService {
     private final UserDao userDao;
     private final SaleDao saleDao;
     private final MentorOverrideDao mentorOverrideDao;
+    private final AppTextDao appTextDao;
     private final AppConfig config;
 
-    public BotService(UserDao userDao, SaleDao saleDao, MentorOverrideDao mentorOverrideDao, AppConfig config) {
+    public BotService(UserDao userDao, SaleDao saleDao, MentorOverrideDao mentorOverrideDao, AppTextDao appTextDao, AppConfig config) {
         this.userDao = userDao;
         this.saleDao = saleDao;
         this.mentorOverrideDao = mentorOverrideDao;
+        this.appTextDao = appTextDao;
         this.config = config;
     }
 
@@ -45,6 +48,9 @@ public class BotService {
     }
 
     public int getDirectReferralLimit(User user) {
+        if (isAdmin(user)) {
+            return Integer.MAX_VALUE;
+        }
         if (user.purchasedLevel() < 1) {
             return 0;
         }
@@ -52,6 +58,9 @@ public class BotService {
     }
 
     public boolean canAcceptNewDirectReferral(User user) {
+        if (isAdmin(user)) {
+            return true;
+        }
         if (user.purchasedLevel() < 1) {
             return false;
         }
@@ -260,5 +269,13 @@ public class BotService {
     }
 
     public record EscalationResult(User previousMentor, User newMentor) {
+    }
+
+    public String getText(String key, String defaultValue) {
+        return appTextDao.get(key).orElse(defaultValue);
+    }
+
+    public void setText(String key, String value) {
+        appTextDao.put(key, value);
     }
 }

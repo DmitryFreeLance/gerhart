@@ -73,6 +73,14 @@ public class Database {
                         FOREIGN KEY (seller_user_id) REFERENCES users(id)
                     )
                     """);
+
+            st.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS app_texts (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL,
+                        updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+                    )
+                    """);
         } catch (SQLException e) {
             throw new RuntimeException("Failed to initialize database", e);
         }
