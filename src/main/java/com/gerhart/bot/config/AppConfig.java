@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 public record AppConfig(
         String botToken,
         String botUsername,
+        String inviteBotUsername,
         Set<Long> adminTgIds,
         String dbUrl,
         int maxLevel,
@@ -15,6 +16,7 @@ public record AppConfig(
     public static AppConfig fromEnv() {
         String token = required("BOT_TOKEN");
         String username = required("BOT_USERNAME");
+        String inviteUsername = System.getenv().getOrDefault("INVITE_BOT_USERNAME", "trusthand_bot");
         String adminsRaw = System.getenv().getOrDefault("ADMIN_IDS", "");
         Set<Long> adminIds = Arrays.stream(adminsRaw.split(","))
                 .map(String::trim)
@@ -27,7 +29,7 @@ public record AppConfig(
         int maxLvl = Integer.parseInt(System.getenv().getOrDefault("MAX_LEVEL", "8"));
         String support = System.getenv().getOrDefault("SUPPORT_CONTACT", "@support");
 
-        return new AppConfig(token, username, adminIds, dbUrl, maxLvl, support);
+        return new AppConfig(token, username, inviteUsername, adminIds, dbUrl, maxLvl, support);
     }
 
     private static String required(String key) {

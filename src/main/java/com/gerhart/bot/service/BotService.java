@@ -44,7 +44,7 @@ public class BotService {
     }
 
     public String getInviteLink(User user) {
-        return "https://t.me/" + config.botUsername() + "?start=ref_" + user.tgId();
+        return "https://t.me/" + config.inviteBotUsername() + "?start=ref_" + user.tgId();
     }
 
     public int getDirectReferralLimit(User user) {

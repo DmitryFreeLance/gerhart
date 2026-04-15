@@ -57,6 +57,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
 
             Скоро здесь будет опубликовано подробное описание правил проекта.
             """;
+    private static final int ABOUT_PAGE_SIZE = 3500;
 
     private final AppConfig config;
     private final BotService service;
@@ -290,6 +291,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
             }
             case "pending" -> sendPendingPayments(user);
             case "about" -> sendAbout(user);
+            case "about_page" -> sendAbout(user, 0);
             case "admin" -> sendAdminPanel(user);
             case "admin_texts" -> sendAdminTexts(user);
             case "admin_users" -> sendAdminUsers(user);
@@ -299,6 +301,8 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                     startProofUpload(user, data);
                 } else if (data.startsWith("edit_text:")) {
                     startEditText(user, data);
+                } else if (data.startsWith("about_page:")) {
+                    showAboutPage(user, data);
                 } else if (data.startsWith("sale_ok:")) {
                     approveSale(user, data);
                 } else if (data.startsWith("sale_no:")) {
@@ -470,7 +474,27 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
     }
 
     private void sendAbout(User user) throws TelegramApiException {
-        sendText(user.tgId(), service.getText(TEXT_ABOUT, DEFAULT_ABOUT_TEXT), backMenuKeyboard());
+        sendAbout(user, 0);
+    }
+
+    private void sendAbout(User user, int page) throws TelegramApiException {
+        String fullText = service.getText(TEXT_ABOUT, DEFAULT_ABOUT_TEXT);
+        List<String> parts = splitIntoPages(fullText, ABOUT_PAGE_SIZE);
+        int pageIndex = Math.max(0, Math.min(page, parts.size() - 1));
+        String text = parts.get(pageIndex);
+        if (parts.size() > 1) {
+            text = text + "\n\n— Часть " + (pageIndex + 1) + " из " + parts.size();
+        }
+        sendText(user.tgId(), text, aboutKeyboard(pageIndex, parts.size()));
+    }
+
+    private void showAboutPage(User user, String data) throws TelegramApiException {
+        int page = parseIntId(data, "about_page:");
+        if (page < 0) {
+            sendText(user.tgId(), "⚠️ Не удалось открыть раздел.", backMenuKeyboard());
+            return;
+        }
+        sendAbout(user, page);
     }
 
     private void sendAdminTexts(User user) throws TelegramApiException {
@@ -744,6 +768,24 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         ));
     }
 
+    private InlineKeyboardMarkup aboutKeyboard(int page, int total) {
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        if (total > 1) {
+            List<InlineKeyboardButton> nav = new ArrayList<>();
+            if (page > 0) {
+                nav.add(button("⬅️ " + page + " часть", "about_page:" + (page - 1)));
+            }
+            if (page < total - 1) {
+                nav.add(button((page + 2) + " часть ➡️", "about_page:" + (page + 1)));
+            }
+            if (!nav.isEmpty()) {
+                rows.add(nav);
+            }
+        }
+        rows.add(List.of(button("🏠 В меню", "menu")));
+        return new InlineKeyboardMarkup(rows);
+    }
+
     private InlineKeyboardMarkup saleReviewKeyboard(long saleId) {
         return new InlineKeyboardMarkup(List.of(
                 List.of(button("✅ Подтвердить", "sale_ok:" + saleId), button("❌ Отклонить", "sale_no:" + saleId)),
@@ -836,5 +878,29 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 Для пользования ботом необходима реферальная ссылка.
                 по всем вопросам: @Gerhard_Stein
                 """;
+    }
+
+    private List<String> splitIntoPages(String text, int maxLen) {
+        if (text == null || text.isBlank()) {
+            return List.of("ℹ️ Раздел пока пуст.");
+        }
+
+        List<String> pages = new ArrayList<>();
+        String remaining = text.trim();
+        while (remaining.length() > maxLen) {
+            int cut = remaining.lastIndexOf('\n', maxLen);
+            if (cut < maxLen / 2) {
+                cut = remaining.lastIndexOf(' ', maxLen);
+            }
+            if (cut < maxLen / 2) {
+                cut = maxLen;
+            }
+            pages.add(remaining.substring(0, cut).trim());
+            remaining = remaining.substring(cut).trim();
+        }
+        if (!remaining.isBlank()) {
+            pages.add(remaining);
+        }
+        return pages.isEmpty() ? List.of("ℹ️ Раздел пока пуст.") : pages;
     }
 }
