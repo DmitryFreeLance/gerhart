@@ -22,6 +22,8 @@ import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.ArrayList;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -213,18 +215,34 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                     return;
                 }
                 if (!message.hasText()) {
-                    sendText(user.tgId(), "✍️ Отправьте новый текст одним сообщением.", backMenuKeyboard());
+                    sendText(user.tgId(), "✍️ Отправьте текстом следующую часть или нажмите «Готово».", textEditKeyboard());
                     return;
                 }
-                String key = state.payload();
-                if (key == null || key.isBlank()) {
+                TextEditPayload payload = decodeTextEditPayload(state.payload());
+                if (!isEditableTextKey(payload.key())) {
                     stateStore.clearState(user.tgId());
                     sendText(user.tgId(), "⚠️ Не удалось определить раздел текста.", backMenuKeyboard());
                     return;
                 }
-                service.setText(key, message.getText().trim());
-                stateStore.clearState(user.tgId());
-                sendText(user.tgId(), "✅ Текст обновлен.", adminTextsKeyboard());
+
+                String part = message.getText().trim();
+                if (part.isBlank()) {
+                    sendText(user.tgId(), "⚠️ Пустая часть не добавлена. Пришлите текст или нажмите «Готово».", textEditKeyboard());
+                    return;
+                }
+
+                List<String> parts = new ArrayList<>(payload.parts());
+                parts.add(part);
+                stateStore.setState(
+                        user.tgId(),
+                        STATE_AWAIT_TEXT_EDIT,
+                        encodeTextEditPayload(payload.key(), parts)
+                );
+                sendText(
+                        user.tgId(),
+                        "✅ Текст добавлен.\n\nПришлите следующую часть или нажмите «Готово».",
+                        textEditKeyboard()
+                );
             }
             default -> {
                 stateStore.clearState(user.tgId());
@@ -296,6 +314,8 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
             case "admin_texts" -> sendAdminTexts(user);
             case "admin_users" -> sendAdminUsers(user);
             case "admin_stats" -> sendAdminStats(user);
+            case "done_text_edit" -> finishTextEdit(user);
+            case "cancel_text_edit" -> cancelTextEdit(user);
             default -> {
                 if (data.startsWith("proof_start:")) {
                     startProofUpload(user, data);
@@ -511,11 +531,11 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
             return;
         }
         String key = data.substring("edit_text:".length());
-        if (!List.of(TEXT_START, TEXT_ABOUT, TEXT_SUPPORT, TEXT_REF_REQUIRED).contains(key)) {
+        if (!isEditableTextKey(key)) {
             sendText(user.tgId(), "⚠️ Неизвестный раздел текста.", backMenuKeyboard());
             return;
         }
-        stateStore.setState(user.tgId(), STATE_AWAIT_TEXT_EDIT, key);
+        stateStore.setState(user.tgId(), STATE_AWAIT_TEXT_EDIT, encodeTextEditPayload(key, List.of()));
 
         String current = switch (key) {
             case TEXT_START -> service.getText(TEXT_START, DEFAULT_START_TEXT);
@@ -524,7 +544,62 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
             case TEXT_REF_REQUIRED -> service.getText(TEXT_REF_REQUIRED, defaultRefRequiredText());
             default -> "";
         };
-        sendText(user.tgId(), "Текущий текст:\n\n" + current + "\n\n✍️ Отправьте новый текст одним сообщением.", backMenuKeyboard());
+        sendText(
+                user.tgId(),
+                "Текущий текст (предпросмотр):\n\n" + previewText(current, 1200)
+                        + "\n\n✍️ Режим редактирования включен.\n"
+                        + "Пришлите первую часть нового текста.\n"
+                        + "После этого можно присылать следующие части и нажать «Готово».",
+                textEditKeyboard()
+        );
+    }
+
+    private void finishTextEdit(User user) throws TelegramApiException {
+        if (!service.isAdmin(user)) {
+            sendText(user.tgId(), "⛔ Нет доступа.", backMenuKeyboard());
+            return;
+        }
+
+        Optional<StateStore.State> stateOpt = stateStore.getState(user.tgId());
+        if (stateOpt.isEmpty() || !STATE_AWAIT_TEXT_EDIT.equals(stateOpt.get().state())) {
+            sendText(user.tgId(), "ℹ️ Режим редактирования не активен.", adminTextsKeyboard());
+            return;
+        }
+
+        TextEditPayload payload = decodeTextEditPayload(stateOpt.get().payload());
+        if (!isEditableTextKey(payload.key())) {
+            stateStore.clearState(user.tgId());
+            sendText(user.tgId(), "⚠️ Не удалось определить раздел текста.", adminTextsKeyboard());
+            return;
+        }
+        if (payload.parts().isEmpty()) {
+            sendText(
+                    user.tgId(),
+                    "ℹ️ Вы пока не прислали ни одной части.\nПришлите текст или нажмите «Отмена».",
+                    textEditKeyboard()
+            );
+            return;
+        }
+
+        String fullText = String.join("\n\n", payload.parts()).trim();
+        service.setText(payload.key(), fullText);
+        stateStore.clearState(user.tgId());
+        sendText(
+                user.tgId(),
+                "✅ Текст обновлен.\n"
+                        + "Раздел: " + payload.key() + "\n"
+                        + "Частей: " + payload.parts().size(),
+                adminTextsKeyboard()
+        );
+    }
+
+    private void cancelTextEdit(User user) throws TelegramApiException {
+        if (!service.isAdmin(user)) {
+            sendText(user.tgId(), "⛔ Нет доступа.", backMenuKeyboard());
+            return;
+        }
+        stateStore.clearState(user.tgId());
+        sendText(user.tgId(), "❌ Редактирование отменено.", adminTextsKeyboard());
     }
 
     private void sendPaymentProfile(User user) throws TelegramApiException {
@@ -768,6 +843,12 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         ));
     }
 
+    private InlineKeyboardMarkup textEditKeyboard() {
+        return new InlineKeyboardMarkup(List.of(
+                List.of(button("✅ Готово", "done_text_edit"), button("❌ Отмена", "cancel_text_edit"))
+        ));
+    }
+
     private InlineKeyboardMarkup aboutKeyboard(int page, int total) {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         if (total > 1) {
@@ -880,6 +961,55 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 """;
     }
 
+    private boolean isEditableTextKey(String key) {
+        return List.of(TEXT_START, TEXT_ABOUT, TEXT_SUPPORT, TEXT_REF_REQUIRED).contains(key);
+    }
+
+    private String encodeTextEditPayload(String key, List<String> parts) {
+        StringBuilder sb = new StringBuilder(key == null ? "" : key);
+        for (String part : parts) {
+            String encoded = Base64.getEncoder()
+                    .encodeToString((part == null ? "" : part).getBytes(StandardCharsets.UTF_8));
+            sb.append('\t').append(encoded);
+        }
+        return sb.toString();
+    }
+
+    private TextEditPayload decodeTextEditPayload(String payload) {
+        if (payload == null || payload.isBlank()) {
+            return new TextEditPayload("", List.of());
+        }
+
+        String[] chunks = payload.split("\t", -1);
+        String key = chunks[0] == null ? "" : chunks[0].trim();
+        List<String> parts = new ArrayList<>();
+        for (int i = 1; i < chunks.length; i++) {
+            String chunk = chunks[i];
+            if (chunk == null || chunk.isBlank()) {
+                continue;
+            }
+            try {
+                String value = new String(Base64.getDecoder().decode(chunk), StandardCharsets.UTF_8);
+                if (!value.isBlank()) {
+                    parts.add(value);
+                }
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        return new TextEditPayload(key, parts);
+    }
+
+    private String previewText(String text, int maxLen) {
+        if (text == null || text.isBlank()) {
+            return "ℹ️ Текст пока пуст.";
+        }
+        String cleaned = text.trim();
+        if (cleaned.length() <= maxLen) {
+            return cleaned;
+        }
+        return cleaned.substring(0, maxLen) + "\n\n…";
+    }
+
     private List<String> splitIntoPages(String text, int maxLen) {
         if (text == null || text.isBlank()) {
             return List.of("ℹ️ Раздел пока пуст.");
@@ -902,5 +1032,8 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
             pages.add(remaining);
         }
         return pages.isEmpty() ? List.of("ℹ️ Раздел пока пуст.") : pages;
+    }
+
+    private record TextEditPayload(String key, List<String> parts) {
     }
 }
