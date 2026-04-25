@@ -13,6 +13,9 @@ import java.util.List;
 import java.util.Optional;
 
 public class BotService {
+    private static final String KEY_BOOTSTRAP_CHAIN = "__bootstrap_chain_user_ids";
+    private static final int BOOTSTRAP_CHAIN_SIZE = 5;
+
     private final UserDao userDao;
     private final SaleDao saleDao;
     private final MentorOverrideDao mentorOverrideDao;
@@ -34,8 +37,22 @@ public class BotService {
             return userDao.findByTgId(tgId).orElseThrow();
         }
 
-        Long sponsorUserId = resolveSponsorUserId(startPayload);
         Role role = config.adminTgIds().contains(tgId) ? Role.ADMIN : Role.USER;
+        Long sponsorUserId = resolveSponsorUserId(startPayload);
+
+        // Автоформирование верхней цепочки из первых 5 пользователей,
+        // которые заходят без реферальной ссылки (кроме админов).
+        if (sponsorUserId == null && role != Role.ADMIN && isNoRefStart(startPayload)) {
+            List<Long> bootstrapChain = getBootstrapChainUserIds();
+            if (bootstrapChain.size() < BOOTSTRAP_CHAIN_SIZE) {
+                sponsorUserId = bootstrapChain.isEmpty() ? null : bootstrapChain.get(bootstrapChain.size() - 1);
+                User created = userDao.create(tgId, username, firstName, sponsorUserId, role);
+                bootstrapChain.add(created.id());
+                saveBootstrapChainUserIds(bootstrapChain);
+                return created;
+            }
+        }
+
         return userDao.create(tgId, username, firstName, sponsorUserId, role);
     }
 
@@ -43,12 +60,20 @@ public class BotService {
         return user.role() == Role.ADMIN || config.adminTgIds().contains(user.tgId());
     }
 
+    public boolean isSystemUpline(User user) {
+        return config.systemUplineTgIds().contains(user.tgId());
+    }
+
+    public boolean isBootstrapChainUser(User user) {
+        return getBootstrapChainUserIds().contains(user.id());
+    }
+
     public String getInviteLink(User user) {
         return "https://t.me/" + config.inviteBotUsername() + "?start=ref_" + user.tgId();
     }
 
     public int getDirectReferralLimit(User user) {
-        if (isAdmin(user)) {
+        if (isAdmin(user) || isSystemUpline(user) || isBootstrapChainUser(user)) {
             return Integer.MAX_VALUE;
         }
         if (user.purchasedLevel() < 1) {
@@ -58,7 +83,7 @@ public class BotService {
     }
 
     public boolean canAcceptNewDirectReferral(User user) {
-        if (isAdmin(user)) {
+        if (isAdmin(user) || isSystemUpline(user) || isBootstrapChainUser(user)) {
             return true;
         }
         if (user.purchasedLevel() < 1) {
@@ -93,7 +118,7 @@ public class BotService {
         while (current.isPresent() && current.get().sponsorUserId() != null) {
             User sponsor = userDao.findById(current.get().sponsorUserId()).orElse(null);
             if (sponsor == null) {
-                return Optional.empty();
+                break;
             }
 
             depth++;
@@ -102,12 +127,29 @@ public class BotService {
             }
             current = Optional.of(sponsor);
         }
+
+        // Фиксированная верхняя цепочка (SYSTEM_UPLINE_TG_IDS), если обычного аплайна не хватает.
+        // Порядок в ENV: от ближайшего к клиенту к самому верхнему.
+        int virtualDepth = depth;
+        for (Long tgId : config.systemUplineTgIds()) {
+            virtualDepth++;
+            User systemUpline = userDao.findByTgId(tgId).orElse(null);
+            if (systemUpline == null) {
+                continue;
+            }
+            if (virtualDepth >= (level - 1) && canSellerSellLevel(systemUpline, level)) {
+                return Optional.of(systemUpline);
+            }
+        }
         return Optional.empty();
     }
 
     public boolean canSellerSellLevel(User seller, int level) {
         if (level < 1 || level > config.maxLevel()) {
             return false;
+        }
+        if (isSystemUpline(seller) || isBootstrapChainUser(seller)) {
+            return true;
         }
         if (level == 1) {
             return seller.purchasedLevel() >= 1 && canAcceptNewDirectReferral(seller);
@@ -266,6 +308,34 @@ public class BotService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private boolean isNoRefStart(String startPayload) {
+        return startPayload == null || startPayload.isBlank() || !startPayload.startsWith("ref_");
+    }
+
+    private List<Long> getBootstrapChainUserIds() {
+        String raw = appTextDao.get(KEY_BOOTSTRAP_CHAIN).orElse("");
+        if (raw.isBlank()) {
+            return new java.util.ArrayList<>();
+        }
+        List<Long> result = new java.util.ArrayList<>();
+        for (String part : raw.split(",")) {
+            String trimmed = part.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            try {
+                result.add(Long.parseLong(trimmed));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return result;
+    }
+
+    private void saveBootstrapChainUserIds(List<Long> ids) {
+        String raw = ids.stream().map(String::valueOf).reduce((a, b) -> a + "," + b).orElse("");
+        appTextDao.put(KEY_BOOTSTRAP_CHAIN, raw);
     }
 
     public record EscalationResult(User previousMentor, User newMentor) {

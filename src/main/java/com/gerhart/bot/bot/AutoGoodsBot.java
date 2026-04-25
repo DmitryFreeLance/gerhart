@@ -950,6 +950,8 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
 
     private boolean isUnauthorizedWithoutRef(User user) {
         return !service.isAdmin(user)
+                && !service.isSystemUpline(user)
+                && !service.isBootstrapChainUser(user)
                 && user.sponsorUserId() == null
                 && user.purchasedLevel() <= 0;
     }

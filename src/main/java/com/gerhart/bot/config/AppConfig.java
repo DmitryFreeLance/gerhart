@@ -9,6 +9,7 @@ public record AppConfig(
         String botUsername,
         String inviteBotUsername,
         Set<Long> adminTgIds,
+        java.util.List<Long> systemUplineTgIds,
         String dbUrl,
         int maxLevel,
         String supportContact
@@ -23,13 +24,19 @@ public record AppConfig(
                 .filter(s -> !s.isEmpty())
                 .map(Long::parseLong)
                 .collect(Collectors.toSet());
+        String systemUplinesRaw = System.getenv().getOrDefault("SYSTEM_UPLINE_TG_IDS", "");
+        java.util.List<Long> systemUplines = Arrays.stream(systemUplinesRaw.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(Long::parseLong)
+                .toList();
 
         String dbPath = System.getenv().getOrDefault("DB_PATH", "data/bot.db");
         String dbUrl = "jdbc:sqlite:" + dbPath;
         int maxLvl = Integer.parseInt(System.getenv().getOrDefault("MAX_LEVEL", "8"));
         String support = System.getenv().getOrDefault("SUPPORT_CONTACT", "@support");
 
-        return new AppConfig(token, username, inviteUsername, adminIds, dbUrl, maxLvl, support);
+        return new AppConfig(token, username, inviteUsername, adminIds, systemUplines, dbUrl, maxLvl, support);
     }
 
     private static String required(String key) {
