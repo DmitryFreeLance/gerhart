@@ -280,7 +280,6 @@ public class BotService {
                 break;
             }
             if (canSellerSellLevel(candidate, level)) {
-                mentorOverrideDao.upsertOverride(buyer.id(), level, candidate.id());
                 return Optional.of(new EscalationResult(currentMentor, candidate));
             }
             cursor = candidate;

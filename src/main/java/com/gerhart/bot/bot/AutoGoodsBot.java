@@ -474,18 +474,24 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         User previous = result.previousMentor();
         User newMentor = result.newMentor();
 
-        String text = "✅ Запрос эскалации выполнен.\n\n"
-                + "Предыдущий наставник: " + displayUser(previous) + "\n"
-                + "Новый наставник: " + displayUser(newMentor) + "\n"
+        String text = "✅ Контакты наставника уровнем выше отправлены.\n\n"
+                + "Текущий наставник: " + displayUser(previous) + "\n"
+                + "Наставник уровнем выше: " + displayUser(newMentor) + "\n"
                 + "Telegram: " + telegramContact(newMentor) + "\n"
                 + "E-mail: " + nullToDash(newMentor.email()) + "\n\n"
-                + "Свяжитесь с новым наставником для получения актуальных реквизитов.";
+                + "ℹ️ Закрепление наставника не изменено. Это разовый контакт для продолжения оплаты.";
         sendText(user.tgId(), text, backMenuKeyboard());
 
-        String notifyText = "🚨 Участник " + displayUser(user) + " (tgId=" + user.tgId() + ") сообщил, что наставник "
-                + displayUser(previous) + " не выходит на связь по уровню " + nextLevel + ".\n"
-                + "Пожалуйста, помогите связаться и провести оплату.";
-        sendText(newMentor.tgId(), notifyText, backMenuKeyboard());
+        String notifyCurrentText = "🚨 Участник " + displayUser(user) + " (tgId=" + user.tgId() + ") нажал кнопку "
+                + "«Наставник не выходит на связь» по уровню " + nextLevel + ".\n"
+                + "Ему выданы контакты наставника уровнем выше: " + displayUser(newMentor) + ".\n"
+                + "Пожалуйста, свяжитесь с участником.";
+        sendText(previous.tgId(), notifyCurrentText, backMenuKeyboard());
+
+        String notifyHigherText = "ℹ️ Участнику " + displayUser(user) + " (tgId=" + user.tgId() + ") выданы ваши контакты "
+                + "как наставника уровнем выше для уровня " + nextLevel + ".\n"
+                + "Закрепление наставника не менялось. При необходимости помогите с оплатой.";
+        sendText(newMentor.tgId(), notifyHigherText, backMenuKeyboard());
     }
 
     private void sendSupport(User user) throws TelegramApiException {
