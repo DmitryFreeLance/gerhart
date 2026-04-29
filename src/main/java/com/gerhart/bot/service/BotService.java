@@ -122,7 +122,9 @@ public class BotService {
             }
 
             depth++;
-            if (depth >= (level - 1) && canSellerSellLevel(sponsor, level)) {
+            // Для уровня 1 нужен наставник на 1 шаг выше (прямой спонсор),
+            // для уровня 2 — на 2 шага выше и т.д.
+            if (depth >= level && canSellerSellLevel(sponsor, level)) {
                 return Optional.of(sponsor);
             }
             current = Optional.of(sponsor);
@@ -137,7 +139,7 @@ public class BotService {
             if (systemUpline == null) {
                 continue;
             }
-            if (virtualDepth >= (level - 1) && canSellerSellLevel(systemUpline, level)) {
+            if (virtualDepth >= level && canSellerSellLevel(systemUpline, level)) {
                 return Optional.of(systemUpline);
             }
         }

@@ -38,6 +38,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
     private static final String TEXT_ABOUT = "about";
     private static final String TEXT_SUPPORT = "support";
     private static final String TEXT_REF_REQUIRED = "ref_required";
+    private static final String TEXT_MENTOR_CONTACTS_HINT = "mentor_contacts_hint";
 
     private static final String DEFAULT_START_TEXT = """
             🚗 Добро пожаловать в клуб автотоваров!
@@ -107,6 +108,17 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
 
         if (isUnauthorizedWithoutRef(user)) {
             sendText(user.tgId(), service.getText(TEXT_REF_REQUIRED, defaultRefRequiredText()), unauthKeyboard());
+            return;
+        }
+
+        if (requiresEmail(user) && !STATE_AWAIT_EMAIL.equals(stateStore.getState(user.tgId()).map(StateStore.State::state).orElse(null))) {
+            stateStore.setState(user.tgId(), STATE_AWAIT_EMAIL, null);
+            sendText(
+                    user.tgId(),
+                    "📧 Для регистрации в системе укажите ваш e-mail одним сообщением.\n\n"
+                            + "Он нужен как резервный контакт для связи с вами.",
+                    emailRequiredKeyboard()
+            );
             return;
         }
 
@@ -290,6 +302,17 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
             return;
         }
 
+        if (requiresEmail(user) && !"set_email".equals(data) && !"support".equals(data) && !"about".equals(data)) {
+            stateStore.setState(user.tgId(), STATE_AWAIT_EMAIL, null);
+            sendText(
+                    user.tgId(),
+                    "📧 Сначала укажите e-mail. Это обязательный шаг регистрации.",
+                    emailRequiredKeyboard()
+            );
+            answerCallback(callbackQuery.getId(), "Нужно указать e-mail");
+            return;
+        }
+
         switch (data) {
             case "menu" -> sendMainMenu(user, "🏠 Главное меню:");
             case "team" -> sendTeam(user);
@@ -447,11 +470,15 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         }
 
         User mentor = mentorOpt.get();
+        String mentorHint = service.getText(
+                TEXT_MENTOR_CONTACTS_HINT,
+                "ℹ️ Актуальные реквизиты наставник отправит вам лично."
+        );
         String text = "📇 Контакты наставника для уровня " + next + "\n\n"
                 + "Имя: " + displayUser(mentor) + "\n"
                 + "Telegram: " + telegramContact(mentor) + "\n"
                 + "E-mail: " + nullToDash(mentor.email()) + "\n\n"
-                + "ℹ️ Актуальные реквизиты наставник отправит вам лично.";
+                + mentorHint;
 
         sendText(user.tgId(), text, backMenuKeyboard());
     }
@@ -548,6 +575,10 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
             case TEXT_ABOUT -> service.getText(TEXT_ABOUT, DEFAULT_ABOUT_TEXT);
             case TEXT_SUPPORT -> service.getText(TEXT_SUPPORT, "🛟 Поддержка: " + config.supportContact());
             case TEXT_REF_REQUIRED -> service.getText(TEXT_REF_REQUIRED, defaultRefRequiredText());
+            case TEXT_MENTOR_CONTACTS_HINT -> service.getText(
+                    TEXT_MENTOR_CONTACTS_HINT,
+                    "ℹ️ Актуальные реквизиты наставник отправит вам лично."
+            );
             default -> "";
         };
         sendText(
@@ -839,12 +870,20 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         return new InlineKeyboardMarkup(List.of(List.of(button("🛟 Помощь", "support"))));
     }
 
+    private InlineKeyboardMarkup emailRequiredKeyboard() {
+        return new InlineKeyboardMarkup(List.of(
+                List.of(button("✏️ Указать e-mail", "set_email")),
+                List.of(button("🛟 Помощь", "support"))
+        ));
+    }
+
     private InlineKeyboardMarkup adminTextsKeyboard() {
         return new InlineKeyboardMarkup(List.of(
                 List.of(button("✍️ Стартовое меню", "edit_text:" + TEXT_START)),
                 List.of(button("✍️ О проекте", "edit_text:" + TEXT_ABOUT)),
                 List.of(button("✍️ Помощь", "edit_text:" + TEXT_SUPPORT)),
                 List.of(button("✍️ Текст без реф-ссылки", "edit_text:" + TEXT_REF_REQUIRED)),
+                List.of(button("✍️ Подсказка в контактах наставника", "edit_text:" + TEXT_MENTOR_CONTACTS_HINT)),
                 List.of(button("⬅️ В админ-панель", "admin"))
         ));
     }
@@ -962,6 +1001,10 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 && user.purchasedLevel() <= 0;
     }
 
+    private boolean requiresEmail(User user) {
+        return user.email() == null || user.email().isBlank();
+    }
+
     private String defaultRefRequiredText() {
         return """
                 Для пользования ботом необходима реферальная ссылка.
@@ -970,7 +1013,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
     }
 
     private boolean isEditableTextKey(String key) {
-        return List.of(TEXT_START, TEXT_ABOUT, TEXT_SUPPORT, TEXT_REF_REQUIRED).contains(key);
+        return List.of(TEXT_START, TEXT_ABOUT, TEXT_SUPPORT, TEXT_REF_REQUIRED, TEXT_MENTOR_CONTACTS_HINT).contains(key);
     }
 
     private String encodeTextEditPayload(String key, List<String> parts) {
