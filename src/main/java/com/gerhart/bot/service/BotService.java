@@ -146,6 +146,13 @@ public class BotService {
         return Optional.empty();
     }
 
+    public Optional<User> findDirectMentor(User user) {
+        if (user.sponsorUserId() == null) {
+            return Optional.empty();
+        }
+        return userDao.findById(user.sponsorUserId());
+    }
+
     public boolean canSellerSellLevel(User seller, int level) {
         if (level < 1 || level > config.maxLevel()) {
             return false;

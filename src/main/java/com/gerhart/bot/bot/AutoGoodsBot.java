@@ -39,6 +39,16 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
     private static final String TEXT_SUPPORT = "support";
     private static final String TEXT_REF_REQUIRED = "ref_required";
     private static final String TEXT_MENTOR_CONTACTS_HINT = "mentor_contacts_hint";
+    private static final String TEXT_BTN_TEAM = "btn_team";
+    private static final String TEXT_BTN_INVITE = "btn_invite";
+    private static final String TEXT_BTN_PROGRESS = "btn_progress";
+    private static final String TEXT_BTN_BUY = "btn_buy";
+    private static final String TEXT_BTN_MENTOR_CONTACTS = "btn_mentor_contacts";
+    private static final String TEXT_BTN_MENTOR_UNREACHABLE = "btn_mentor_unreachable";
+    private static final String TEXT_BTN_PENDING = "btn_pending";
+    private static final String TEXT_BTN_ABOUT = "btn_about";
+    private static final String TEXT_BTN_SUPPORT = "btn_support";
+    private static final String TEXT_BTN_ADMIN = "btn_admin";
 
     private static final String DEFAULT_START_TEXT = """
             🚗 Добро пожаловать в клуб автотоваров!
@@ -111,17 +121,6 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
             return;
         }
 
-        if (requiresEmail(user) && !STATE_AWAIT_EMAIL.equals(stateStore.getState(user.tgId()).map(StateStore.State::state).orElse(null))) {
-            stateStore.setState(user.tgId(), STATE_AWAIT_EMAIL, null);
-            sendText(
-                    user.tgId(),
-                    "📧 Для регистрации в системе укажите ваш e-mail одним сообщением.\n\n"
-                            + "Он нужен как резервный контакт для связи с вами.",
-                    emailRequiredKeyboard()
-            );
-            return;
-        }
-
         if (text != null && text.startsWith("/start")) {
             sendMainMenu(user, service.getText(TEXT_START, DEFAULT_START_TEXT));
             return;
@@ -153,7 +152,31 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                     sendText(user.tgId(), "📧 Отправьте e-mail текстом.", backMenuKeyboard());
                     return;
                 }
-                service.setEmail(user, message.getText().trim());
+                String email = message.getText().trim();
+                service.setEmail(user, email);
+
+                if (state.payload() != null && state.payload().startsWith("proof|")) {
+                    String[] parts = state.payload().split("\\|", 4);
+                    if (parts.length == 4) {
+                        try {
+                            int level = Integer.parseInt(parts[1]);
+                            String proofType = parts[2];
+                            String proofFileId = parts[3];
+                            Sale sale = service.createPendingSale(user, level, proofType, proofFileId);
+                            stateStore.clearState(user.tgId());
+                            User seller = service.getUserById(sale.sellerUserId());
+                            sendText(
+                                    user.tgId(),
+                                    "✅ E-mail сохранен, чек отправлен на проверку. После подтверждения уровень будет активирован.",
+                                    mainMenuKeyboard(service.refreshUser(user))
+                            );
+                            notifyReviewers(sale, seller, user);
+                            return;
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
+
                 stateStore.clearState(user.tgId());
                 sendMainMenu(service.refreshUser(user), "✅ E-mail сохранен.");
             }
@@ -207,6 +230,17 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                     Document document = message.getDocument();
                     proofType = "DOCUMENT";
                     proofFileId = document.getFileId();
+                }
+
+                if (requiresEmail(user)) {
+                    stateStore.setState(user.tgId(), STATE_AWAIT_EMAIL, "proof|" + level + "|" + proofType + "|" + proofFileId);
+                    sendText(
+                            user.tgId(),
+                            "📧 Перед отправкой чека нужно указать актуальный e-mail.\n"
+                                    + "Отправьте e-mail одним сообщением, после этого чек уйдет на проверку.",
+                            emailRequiredKeyboard()
+                    );
+                    return;
                 }
 
                 Sale sale = service.createPendingSale(user, level, proofType, proofFileId);
@@ -299,17 +333,6 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
         if (isUnauthorizedWithoutRef(user) && !"support".equals(data) && !"about".equals(data)) {
             sendText(user.tgId(), service.getText(TEXT_REF_REQUIRED, defaultRefRequiredText()), unauthKeyboard());
             answerCallback(callbackQuery.getId(), "⛔ Нужна реферальная ссылка");
-            return;
-        }
-
-        if (requiresEmail(user) && !"set_email".equals(data) && !"support".equals(data) && !"about".equals(data)) {
-            stateStore.setState(user.tgId(), STATE_AWAIT_EMAIL, null);
-            sendText(
-                    user.tgId(),
-                    "📧 Сначала укажите e-mail. Это обязательный шаг регистрации.",
-                    emailRequiredKeyboard()
-            );
-            answerCallback(callbackQuery.getId(), "Нужно указать e-mail");
             return;
         }
 
@@ -457,15 +480,9 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
     }
 
     private void sendMentorContacts(User user) throws TelegramApiException {
-        int next = service.getNextLevel(user);
-        if (next == -1) {
-            sendText(user.tgId(), "Максимальный уровень уже открыт. Дополнительные контакты не требуются.", backMenuKeyboard());
-            return;
-        }
-
-        Optional<User> mentorOpt = service.findMentorForLevel(user, next);
+        Optional<User> mentorOpt = service.findDirectMentor(user);
         if (mentorOpt.isEmpty()) {
-            sendText(user.tgId(), "Наставник для следующего уровня не найден. Обратитесь в поддержку.", backMenuKeyboard());
+            sendText(user.tgId(), "У вас пока нет прямого наставника. Обратитесь в поддержку.", backMenuKeyboard());
             return;
         }
 
@@ -474,7 +491,7 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 TEXT_MENTOR_CONTACTS_HINT,
                 "ℹ️ Актуальные реквизиты наставник отправит вам лично."
         );
-        String text = "📇 Контакты наставника для уровня " + next + "\n\n"
+        String text = "📇 Контакты вашего наставника\n\n"
                 + "Имя: " + displayUser(mentor) + "\n"
                 + "Telegram: " + telegramContact(mentor) + "\n"
                 + "E-mail: " + nullToDash(mentor.email()) + "\n\n"
@@ -579,6 +596,16 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                     TEXT_MENTOR_CONTACTS_HINT,
                     "ℹ️ Актуальные реквизиты наставник отправит вам лично."
             );
+            case TEXT_BTN_TEAM -> buttonText(TEXT_BTN_TEAM, "👥 Моя команда");
+            case TEXT_BTN_INVITE -> buttonText(TEXT_BTN_INVITE, "🔗 Пригласить");
+            case TEXT_BTN_PROGRESS -> buttonText(TEXT_BTN_PROGRESS, "📈 Мой прогресс");
+            case TEXT_BTN_BUY -> buttonText(TEXT_BTN_BUY, "🛒 Купить уровень");
+            case TEXT_BTN_MENTOR_CONTACTS -> buttonText(TEXT_BTN_MENTOR_CONTACTS, "📇 Контакты наставника");
+            case TEXT_BTN_MENTOR_UNREACHABLE -> buttonText(TEXT_BTN_MENTOR_UNREACHABLE, "🚨 Наставник не выходит на связь");
+            case TEXT_BTN_PENDING -> buttonText(TEXT_BTN_PENDING, "💸 Новые оплаты (проверка)");
+            case TEXT_BTN_ABOUT -> buttonText(TEXT_BTN_ABOUT, "ℹ️ О проекте");
+            case TEXT_BTN_SUPPORT -> buttonText(TEXT_BTN_SUPPORT, "🛟 Помощь");
+            case TEXT_BTN_ADMIN -> buttonText(TEXT_BTN_ADMIN, "🛠 Админ-панель");
             default -> "";
         };
         sendText(
@@ -848,15 +875,24 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
 
     private InlineKeyboardMarkup mainMenuKeyboard(User user) {
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-        rows.add(List.of(button("👥 Моя команда", "team"), button("🔗 Пригласить", "invite")));
-        rows.add(List.of(button("📈 Мой прогресс", "progress"), button("🛒 Купить уровень", "buy")));
-        rows.add(List.of(button("📇 Контакты наставника", "mentor_contacts")));
-        rows.add(List.of(button("🚨 Наставник не выходит на связь", "mentor_unreachable")));
-        rows.add(List.of(button("💸 Новые оплаты (проверка)", "pending")));
-        rows.add(List.of(button("ℹ️ О проекте", "about"), button("🛟 Помощь", "support")));
+        rows.add(List.of(
+                button(buttonText(TEXT_BTN_TEAM, "👥 Моя команда"), "team"),
+                button(buttonText(TEXT_BTN_INVITE, "🔗 Пригласить"), "invite")
+        ));
+        rows.add(List.of(
+                button(buttonText(TEXT_BTN_PROGRESS, "📈 Мой прогресс"), "progress"),
+                button(buttonText(TEXT_BTN_BUY, "🛒 Купить уровень"), "buy")
+        ));
+        rows.add(List.of(button(buttonText(TEXT_BTN_MENTOR_CONTACTS, "📇 Контакты наставника"), "mentor_contacts")));
+        rows.add(List.of(button(buttonText(TEXT_BTN_MENTOR_UNREACHABLE, "🚨 Наставник не выходит на связь"), "mentor_unreachable")));
+        rows.add(List.of(button(buttonText(TEXT_BTN_PENDING, "💸 Новые оплаты (проверка)"), "pending")));
+        rows.add(List.of(
+                button(buttonText(TEXT_BTN_ABOUT, "ℹ️ О проекте"), "about"),
+                button(buttonText(TEXT_BTN_SUPPORT, "🛟 Помощь"), "support")
+        ));
 
         if (service.isAdmin(user)) {
-            rows.add(List.of(button("🛠 Админ-панель", "admin")));
+            rows.add(List.of(button(buttonText(TEXT_BTN_ADMIN, "🛠 Админ-панель"), "admin")));
         }
 
         return new InlineKeyboardMarkup(rows);
@@ -884,6 +920,16 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 List.of(button("✍️ Помощь", "edit_text:" + TEXT_SUPPORT)),
                 List.of(button("✍️ Текст без реф-ссылки", "edit_text:" + TEXT_REF_REQUIRED)),
                 List.of(button("✍️ Подсказка в контактах наставника", "edit_text:" + TEXT_MENTOR_CONTACTS_HINT)),
+                List.of(button("✍️ Кнопка: Моя команда", "edit_text:" + TEXT_BTN_TEAM)),
+                List.of(button("✍️ Кнопка: Пригласить", "edit_text:" + TEXT_BTN_INVITE)),
+                List.of(button("✍️ Кнопка: Мой прогресс", "edit_text:" + TEXT_BTN_PROGRESS)),
+                List.of(button("✍️ Кнопка: Купить уровень", "edit_text:" + TEXT_BTN_BUY)),
+                List.of(button("✍️ Кнопка: Контакты наставника", "edit_text:" + TEXT_BTN_MENTOR_CONTACTS)),
+                List.of(button("✍️ Кнопка: Наставник не на связи", "edit_text:" + TEXT_BTN_MENTOR_UNREACHABLE)),
+                List.of(button("✍️ Кнопка: Новые оплаты", "edit_text:" + TEXT_BTN_PENDING)),
+                List.of(button("✍️ Кнопка: О проекте", "edit_text:" + TEXT_BTN_ABOUT)),
+                List.of(button("✍️ Кнопка: Помощь", "edit_text:" + TEXT_BTN_SUPPORT)),
+                List.of(button("✍️ Кнопка: Админ-панель", "edit_text:" + TEXT_BTN_ADMIN)),
                 List.of(button("⬅️ В админ-панель", "admin"))
         ));
     }
@@ -1012,8 +1058,16 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
                 """;
     }
 
+    private String buttonText(String key, String defaultValue) {
+        return service.getText(key, defaultValue);
+    }
+
     private boolean isEditableTextKey(String key) {
-        return List.of(TEXT_START, TEXT_ABOUT, TEXT_SUPPORT, TEXT_REF_REQUIRED, TEXT_MENTOR_CONTACTS_HINT).contains(key);
+        return List.of(
+                TEXT_START, TEXT_ABOUT, TEXT_SUPPORT, TEXT_REF_REQUIRED, TEXT_MENTOR_CONTACTS_HINT,
+                TEXT_BTN_TEAM, TEXT_BTN_INVITE, TEXT_BTN_PROGRESS, TEXT_BTN_BUY, TEXT_BTN_MENTOR_CONTACTS,
+                TEXT_BTN_MENTOR_UNREACHABLE, TEXT_BTN_PENDING, TEXT_BTN_ABOUT, TEXT_BTN_SUPPORT, TEXT_BTN_ADMIN
+        ).contains(key);
     }
 
     private String encodeTextEditPayload(String key, List<String> parts) {
