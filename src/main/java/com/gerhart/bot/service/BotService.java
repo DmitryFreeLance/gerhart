@@ -34,6 +34,16 @@ public class BotService {
         Optional<User> existing = userDao.findByTgId(tgId);
         if (existing.isPresent()) {
             userDao.updateProfile(tgId, username, firstName);
+
+            User current = userDao.findByTgId(tgId).orElseThrow();
+            // Если пользователь уже был в базе без спонсора и позже пришел по реф-ссылке,
+            // привязываем спонсора (пока пользователь еще не купил уровень).
+            if (current.sponsorUserId() == null && current.purchasedLevel() <= 0) {
+                Long sponsorUserId = resolveSponsorUserId(startPayload);
+                if (sponsorUserId != null && sponsorUserId != current.id()) {
+                    userDao.setSponsorIfAbsent(current.id(), sponsorUserId);
+                }
+            }
             return userDao.findByTgId(tgId).orElseThrow();
         }
 

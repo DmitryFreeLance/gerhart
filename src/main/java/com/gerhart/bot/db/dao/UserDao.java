@@ -91,6 +91,17 @@ public class UserDao {
         }
     }
 
+    public void setSponsorIfAbsent(long userId, long sponsorUserId) {
+        String sql = "UPDATE users SET sponsor_user_id = ? WHERE id = ? AND sponsor_user_id IS NULL";
+        try (Connection conn = database.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, sponsorUserId);
+            ps.setLong(2, userId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public void setEmail(long userId, String email) {
         String sql = "UPDATE users SET email = ? WHERE id = ?";
         try (Connection conn = database.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
