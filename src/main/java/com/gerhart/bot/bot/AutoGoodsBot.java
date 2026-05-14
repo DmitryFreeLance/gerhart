@@ -27,6 +27,9 @@ import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class AutoGoodsBot extends TelegramLongPollingBot {
     private static final String STATE_AWAIT_EMAIL = "AWAIT_EMAIL";
@@ -71,16 +74,20 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
             Скоро здесь будет опубликовано подробное описание правил проекта.
             """;
     private static final int ABOUT_PAGE_SIZE = 3500;
+    private static final Path START_MENU_PHOTO_PATH = Paths.get("media", "1.jpeg");
+    private static final String START_MENU_PHOTO_FILE_ID_KEY = "__start_menu_photo_file_id";
 
     private final AppConfig config;
     private final BotService service;
     private final StateStore stateStore;
+    private volatile String cachedStartMenuPhotoFileId;
 
     public AutoGoodsBot(AppConfig config, BotService service, StateStore stateStore) {
         super(config.botToken());
         this.config = config;
         this.service = service;
         this.stateStore = stateStore;
+        this.cachedStartMenuPhotoFileId = emptyToNull(service.getText(START_MENU_PHOTO_FILE_ID_KEY, ""));
     }
 
     @Override
@@ -973,7 +980,35 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
     }
 
     private void sendMainMenu(User user, String text) throws TelegramApiException {
-        sendText(user.tgId(), text, mainMenuKeyboard(service.refreshUser(user)));
+        sendMainMenuWithPhoto(user.tgId(), text, mainMenuKeyboard(service.refreshUser(user)));
+    }
+
+    private void sendMainMenuWithPhoto(long chatId, String text, InlineKeyboardMarkup keyboard) throws TelegramApiException {
+        SendPhoto photo = new SendPhoto();
+        photo.setChatId(chatId);
+        photo.setCaption(text);
+        photo.setReplyMarkup(keyboard);
+
+        if (cachedStartMenuPhotoFileId != null && !cachedStartMenuPhotoFileId.isBlank()) {
+            photo.setPhoto(new InputFile(cachedStartMenuPhotoFileId));
+            execute(photo);
+            return;
+        }
+
+        if (!Files.exists(START_MENU_PHOTO_PATH)) {
+            sendText(chatId, text, keyboard);
+            return;
+        }
+
+        photo.setPhoto(new InputFile(START_MENU_PHOTO_PATH.toFile()));
+        Message sent = execute(photo);
+        if (sent != null && sent.hasPhoto() && !sent.getPhoto().isEmpty()) {
+            PhotoSize best = sent.getPhoto().stream()
+                    .max(Comparator.comparing(PhotoSize::getFileSize))
+                    .orElse(sent.getPhoto().get(0));
+            cachedStartMenuPhotoFileId = best.getFileId();
+            service.setText(START_MENU_PHOTO_FILE_ID_KEY, cachedStartMenuPhotoFileId);
+        }
     }
 
     private void sendText(long chatId, String text, InlineKeyboardMarkup keyboard) throws TelegramApiException {
@@ -1037,6 +1072,13 @@ public class AutoGoodsBot extends TelegramLongPollingBot {
 
     private String nullToDash(String value) {
         return value == null || value.isBlank() ? "не указано" : value;
+    }
+
+    private String emptyToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value;
     }
 
     private boolean isUnauthorizedWithoutRef(User user) {
